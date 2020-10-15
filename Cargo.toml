@@ -6,8 +6,15 @@ edition = "2018"
 
 [dependencies]
 rayon = "1.4.1"
-pyo3 = "0.12.3"
+pyo3 = { version = "0.12.3", features = ["extension-module"] }
+sled = "0.34.4"
+proc-macro-error = "1.0.4"
 
 [lib]
-name = "word_count"
+name = "microdb"
 crate-type = ["cdylib"]
+proc-macro = true
+
+[[bin]]
+name = "microdbbin"
+path = "src/bin.rs"

@@ -1,21 +1,23 @@
 import os
 import sys
+import platform
 
 from setuptools import setup
 from setuptools.command.test import test as TestCommand
 from setuptools.command.sdist import sdist as SdistCommand
+from setuptools_rust import RustExtension
 
-try:
-    from setuptools_rust import RustExtension
-except ImportError:
-    import subprocess
 
-    errno = subprocess.call([sys.executable, "-m", "pip", "install", "setuptools-rust"])
-    if errno:
-        print("Please install setuptools-rust package")
+class PyTest(TestCommand):
+    user_options = []
+
+    def run(self):
+        self.run_command("test_rust")
+
+        import subprocess
+
+        errno = subprocess.call(["pytest", "tests"])
         raise SystemExit(errno)
-    else:
-        from setuptools_rust import RustExtension
 
 
 class CargoModifiedSdist(SdistCommand):
@@ -54,24 +56,32 @@ class CargoModifiedSdist(SdistCommand):
             toml.dump(cargo_toml, f)
 
 
-class PyTest(TestCommand):
-    user_options = []
+def get_py_version_cfgs():
+    # For now each Cfg Py_3_X flag is interpreted as "at least 3.X"
+    version = sys.version_info[0:2]
+    py3_min = 5
+    out_cfg = []
+    for minor in range(py3_min, version[1] + 1):
+        out_cfg.append("--cfg=Py_3_%d" % minor)
 
-    def run(self):
-        self.run_command("test_rust")
+    if platform.python_implementation() == "PyPy":
+        out_cfg.append("--cfg=PyPy")
 
-        import subprocess
-
-        subprocess.check_call(["pytest", "tests"])
+    return out_cfg
 
 
-setup_requires = ["setuptools-rust>=0.10.1", "wheel"]
+def make_rust_extension(module_name):
+    return RustExtension(
+        module_name, "Cargo.toml", rustc_flags=get_py_version_cfgs(), debug=True
+    )
+
+
 install_requires = []
 tests_require = install_requires + ["pytest", "pytest-benchmark"]
 
 setup(
     name="microdb",
-    version="0.0.1",
+    version="0.1.0",
     classifiers=[
         "License :: OSI Approved :: MIT License",
         "Development Status :: 3 - Alpha",
@@ -82,10 +92,12 @@ setup(
         "Operating System :: MacOS :: MacOS X",
     ],
     packages=["microdb"],
-    rust_extensions=[RustExtension("microdb.microdb", "Cargo.toml", debug=False)],
+    rust_extensions=[
+        make_rust_extension("microdb.microdb"),
+        make_rust_extension("microdb.utils")
+    ],
     install_requires=install_requires,
     tests_require=tests_require,
-    setup_requires=setup_requires,
     include_package_data=True,
     zip_safe=False,
     cmdclass={"test": PyTest, "sdist": CargoModifiedSdist},
